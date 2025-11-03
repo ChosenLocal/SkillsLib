@@ -1,0 +1,543 @@
+// Prisma schema for business automation system
+// Multi-tenant architecture with Row-Level Security
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+// =============================================================================
+// TENANT & USER MANAGEMENT
+// =============================================================================
+
+model Tenant {
+  id                  String            @id @default(uuid())
+  name                String
+  slug                String            @unique
+  subscriptionTier    SubscriptionTier  @default(FREE)
+
+  // Billing
+  stripeCustomerId    String?           @unique
+  subscriptionStatus  SubscriptionStatus?
+
+  // Settings (JSON)
+  settings            Json              @default("{}")
+
+  // Usage Metrics
+  projectsCount       Int               @default(0)
+  agentExecutionsThisMonth Int          @default(0)
+  storageUsedGB       Float             @default(0)
+  lastResetDate       DateTime          @default(now())
+
+  // Timestamps
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  deletedAt           DateTime?
+
+  // Relations
+  users               User[]
+  projects            Project[]
+  companyProfiles     CompanyProfile[]
+  agentExecutions     AgentExecution[]
+  workflowExecutions  WorkflowExecution[]
+  workflowDefinitions WorkflowDefinition[]
+
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("tenants")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  email           String
+  name            String
+  tenantId        String
+  role            UserRole  @default(MEMBER)
+
+  // Authentication
+  passwordHash    String?
+  emailVerified   DateTime?
+
+  // Profile
+  avatarUrl       String?
+  timezone        String    @default("America/New_York")
+  preferences     Json      @default("{}")
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+  deletedAt       DateTime?
+
+  // Relations
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([email, tenantId])
+  @@index([tenantId])
+  @@index([email])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// =============================================================================
+// COMPANY PROFILES
+// =============================================================================
+
+model CompanyProfile {
+  id                      String    @id @default(uuid())
+  tenantId                String
+
+  // Basic Information
+  name                    String
+  legalName               String
+  tagline                 String
+  founded                 DateTime?
+  industry                String
+
+  // Contact & Locations (JSON)
+  contact                 Json
+  locations               Json
+  hours                   Json
+  emergencyAvailable      Boolean   @default(false)
+
+  // Services & Areas (JSON)
+  services                Json
+  serviceAreas            Json
+
+  // Brand Identity (JSON)
+  brand                   Json
+
+  // Certifications & Credentials (JSON)
+  certifications          Json
+  licenses                Json
+  insurance               Json
+  manufacturerCerts       Json
+  industryAffiliations    Json
+
+  // Content Assets (JSON)
+  teamMembers             Json
+  projects                Json
+  testimonials            Json
+  awards                  Json
+  caseStudies             Json
+
+  // Marketing & SEO (JSON)
+  seo                     Json
+
+  // Business Metrics (JSON)
+  metrics                 Json
+
+  // Integrations (JSON)
+  integrations            Json      @default("{}")
+
+  // Website Configuration (JSON)
+  websiteConfig           Json
+
+  // Metadata
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  lastWebsiteGeneration   DateTime?
+  websiteGenerationCount  Int       @default(0)
+
+  // Relations
+  tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  websiteProjects         Project[]
+
+  @@index([tenantId])
+  @@index([industry])
+  @@map("company_profiles")
+}
+
+// =============================================================================
+// PROJECTS
+// =============================================================================
+
+model Project {
+  id                    String          @id @default(uuid())
+  tenantId              String
+  name                  String
+  description           String?
+  type                  ProjectType
+  status                ProjectStatus   @default(DRAFT)
+
+  // Discovery and Planning
+  discoveryData         Json            @default("{}")
+  companyProfileId      String?
+
+  // Workflow State
+  currentWorkflowId     String?
+  workflowState         Json            @default("{}")
+  currentIteration      Int             @default(1)
+  maxIterations         Int             @default(3)
+
+  // Output and Deployment
+  outputPath            String?
+  deploymentUrl         String?
+  repositoryUrl         String?
+
+  // Metadata
+  tags                  String[]
+  notes                 String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  completedAt           DateTime?
+
+  // Relations
+  tenant                Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  companyProfile        CompanyProfile? @relation(fields: [companyProfileId], references: [id], onDelete: SetNull)
+  workflowExecutions    WorkflowExecution[]
+  agentExecutions       AgentExecution[]
+  generatedAssets       GeneratedAsset[]
+  evaluations           WebsiteEvaluation[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([type])
+  @@index([companyProfileId])
+  @@map("projects")
+}
+
+model GeneratedAsset {
+  id              String        @id @default(uuid())
+  projectId       String
+  tenantId        String        // Denormalized for RLS
+
+  type            AssetType
+  name            String
+  path            String
+  url             String?
+  content         String?       @db.Text
+  metadata        Json          @default("{}")
+
+  agentId         String
+
+  createdAt       DateTime      @default(now())
+
+  // Relations
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([tenantId])
+  @@index([type])
+  @@map("generated_assets")
+}
+
+model WebsiteEvaluation {
+  id                      String    @id @default(uuid())
+  projectId               String
+  tenantId                String    // Denormalized for RLS
+
+  iteration               Int
+  overallScore            Float
+  grades                  Json      // Array of QualityGrade
+  shouldRefine            Boolean
+  refinementInstructions  String[]
+
+  createdAt               DateTime  @default(now())
+
+  // Relations
+  project                 Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([tenantId])
+  @@index([iteration])
+  @@map("website_evaluations")
+}
+
+// =============================================================================
+// WORKFLOWS
+// =============================================================================
+
+model WorkflowDefinition {
+  id            String         @id @default(uuid())
+  tenantId      String
+  name          String
+  description   String
+  type          WorkflowType
+  version       String
+
+  // Workflow Structure (JSON)
+  steps         Json
+  config        Json           @default("{}")
+
+  isActive      Boolean        @default(true)
+  tags          String[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  executions    WorkflowExecution[]
+
+  @@unique([tenantId, name, version])
+  @@index([tenantId])
+  @@index([type])
+  @@map("workflow_definitions")
+}
+
+model WorkflowExecution {
+  id                      String           @id @default(uuid())
+  tenantId                String
+  projectId               String
+  workflowId              String
+
+  workflowType            WorkflowType
+  workflowVersion         String
+
+  // Execution State
+  status                  WorkflowStatus   @default(QUEUED)
+  currentStep             String?
+  currentStepName         String?
+  totalSteps              Int
+  completedSteps          Int              @default(0)
+  progressPercentage      Float            @default(0)
+
+  // Input/Output (JSON)
+  input                   Json             @default("{}")
+  output                  Json?
+  context                 Json             @default("{}")
+
+  // Error Handling
+  error                   Json?
+  retryCount              Int              @default(0)
+
+  // Iteration (for refinement)
+  iteration               Int              @default(1)
+  maxIterations           Int              @default(3)
+  shouldContinueIteration Boolean          @default(false)
+
+  // Performance Metrics
+  executionTimeMs         Int?
+  totalCost               Float?
+
+  // Tracing
+  traceId                 String?
+
+  // Metadata
+  metadata                Json             @default("{}")
+  createdAt               DateTime         @default(now())
+  startedAt               DateTime?
+  completedAt             DateTime?
+  pausedAt                DateTime?
+  updatedAt               DateTime         @updatedAt
+
+  // Relations
+  tenant                  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project                 Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowDefinition      WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  agentExecutions         AgentExecution[]
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([workflowId])
+  @@index([status])
+  @@index([workflowType])
+  @@index([traceId])
+  @@map("workflow_executions")
+}
+
+// =============================================================================
+// AGENTS
+// =============================================================================
+
+model AgentExecution {
+  id                    String              @id @default(uuid())
+  tenantId              String
+  projectId             String
+  workflowExecutionId   String?
+
+  // Agent Information
+  agentName             String
+  agentRole             AgentRole
+  layer                 AgentLayer
+  config                Json                @default("{}")
+
+  // Execution State
+  status                AgentStatus         @default(PENDING)
+  iteration             Int                 @default(1)
+
+  // Input/Output (JSON)
+  input                 Json                @default("{}")
+  output                Json?
+  error                 Json?
+
+  // Evaluation (for quality grading agents)
+  evaluation            Json?
+
+  // Performance Metrics
+  executionTimeMs       Int?
+  tokensUsed            Int?
+  cost                  Float?
+
+  // Tracing and Observability
+  traceId               String?
+  spanId                String?
+  parentSpanId          String?
+
+  // Metadata
+  metadata              Json                @default("{}")
+  createdAt             DateTime            @default(now())
+  startedAt             DateTime?
+  completedAt           DateTime?
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project               Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowExecution     WorkflowExecution?  @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([workflowExecutionId])
+  @@index([status])
+  @@index([agentRole])
+  @@index([layer])
+  @@index([traceId])
+  @@map("agent_executions")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ProjectType {
+  WEBSITE
+  CONTENT
+  SEO_AUDIT
+  WORKFLOW
+  DATA_PROCESSING
+  CUSTOMER_SERVICE
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+  FAILED
+}
+
+enum AssetType {
+  PAGE
+  COMPONENT
+  CONTENT
+  IMAGE
+  STYLE
+  CONFIG
+  DOCUMENTATION
+}
+
+enum WorkflowType {
+  WEBSITE_GENERATION
+  CONTENT_GENERATION
+  SEO_AUDIT
+  DATA_PROCESSING
+  CUSTOMER_SERVICE
+  WORKFLOW_ORCHESTRATION
+}
+
+enum WorkflowStatus {
+  QUEUED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AgentLayer {
+  ORCHESTRATOR
+  DISCOVERY
+  DESIGN
+  CONTENT
+  CODE
+  QUALITY
+}
+
+enum AgentRole {
+  // Orchestrator
+  ORCHESTRATOR
+
+  // Discovery Layer (8 agents)
+  BUSINESS_REQUIREMENTS
+  SERVICE_DEFINITION
+  BRAND_IDENTITY
+  SEO_STRATEGY
+  CONTENT_ASSET
+  LEGAL_COMPLIANCE
+  TECHNICAL_REQUIREMENTS
+  DISCOVERY_VALIDATOR
+
+  // Design & Branding Layer (10 agents)
+  COLOR_PALETTE
+  TYPOGRAPHY
+  LAYOUT_ARCHITECTURE
+  COMPONENT_DESIGN
+  RESPONSIVE_DESIGN
+  ANIMATION
+  IMAGE_SELECTION
+  ICON_DESIGN
+  BRAND_CONSISTENCY
+  ACCESSIBILITY
+
+  // Content Generation Layer (10 agents)
+  HERO_COPY
+  SERVICE_DESCRIPTION
+  ABOUT_PAGE
+  BLOG_CONTENT
+  FAQ
+  TESTIMONIAL
+  META_DESCRIPTION
+  SCHEMA_MARKUP
+  LOCAL_SEO
+  CALL_TO_ACTION
+
+  // Code Generation Layer (5 agents)
+  NEXTJS_SCAFFOLD
+  COMPONENT_CODE
+  API_ROUTE
+  STYLING
+  INTEGRATION
+
+  // Quality Grading Layer (5 agents)
+  PERFORMANCE_EVALUATOR
+  SEO_EVALUATOR
+  ACCESSIBILITY_EVALUATOR
+  CODE_QUALITY_EVALUATOR
+  CONTENT_QUALITY_EVALUATOR
+}
+
+enum AgentStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}

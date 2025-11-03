@@ -1,0 +1,50 @@
+{
+  "name": "business-automation-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-agent business automation system with 30+ agent website builder for contractor clients",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "type-check": "turbo run type-check",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:generate": "turbo run db:generate",
+    "db:push": "turbo run db:push",
+    "db:migrate": "turbo run db:migrate",
+    "db:studio": "turbo run db:studio"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@types/node": "^20.11.19",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "turbo": "^2.0.3",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.1.0",
+  "keywords": [
+    "automation",
+    "multi-agent",
+    "website-builder",
+    "contractor",
+    "ai",
+    "claude",
+    "nextjs"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
