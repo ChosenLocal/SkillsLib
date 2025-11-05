@@ -15,16 +15,35 @@ export * from './orchestrator';
 // Export jobs
 export * from './jobs';
 
-// Export POC agents
+// Export 3-Tier Architecture Agents
+// Strategy Tier
+export * from './strategy';
+
+// Build Tier
+export * from './build';
+
+// Quality Tier
+export * from './quality';
+
+// Export POC agents (legacy)
 export { BusinessRequirementsAgent } from './discovery/business-requirements';
 export { ColorPaletteAgent } from './design/color-palette';
 export { HeroCopyAgent } from './content/hero-copy';
 
-// Auto-register POC agents
+// Auto-register all agents
 import { registerAgents } from './orchestrator/registry';
 import { BusinessRequirementsAgent } from './discovery/business-requirements';
 import { ColorPaletteAgent } from './design/color-palette';
 import { HeroCopyAgent } from './content/hero-copy';
+import { PlannerAgent } from './strategy/planner';
+import { IAArchitectAgent } from './strategy/ia-architect';
+import { BrandInterpreterAgent } from './strategy/brand-interpreter';
+import { BacklogManagerAgent } from './strategy/backlog-manager';
+import { ScaffolderAgent } from './build/scaffolder';
+import { ComponentWorkerAgent } from './build/component-worker';
+import { PageAssemblerAgent } from './build/page-assembler';
+import { StaticAnalyzerAgent } from './quality/static-analyzer';
+import { FixerAgent } from './quality/fixer';
 
 /**
  * Register all available agents
@@ -34,12 +53,25 @@ import { HeroCopyAgent } from './content/hero-copy';
  */
 export function registerAllAgents(): void {
   registerAgents([
+    // Strategy Tier
+    PlannerAgent,
+    IAArchitectAgent,
+    BrandInterpreterAgent,
+    BacklogManagerAgent,
+    // Build Tier
+    ScaffolderAgent,
+    ComponentWorkerAgent,
+    PageAssemblerAgent,
+    // Quality Tier
+    StaticAnalyzerAgent,
+    FixerAgent,
+    // POC agents (legacy)
     BusinessRequirementsAgent,
     ColorPaletteAgent,
     HeroCopyAgent,
   ]);
 
-  console.log('[Agents] Registered 3 POC agents');
+  console.log('[Agents] Registered 12 agents (9 production + 3 POC)');
 }
 
 /**
