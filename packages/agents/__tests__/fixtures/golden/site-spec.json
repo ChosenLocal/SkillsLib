@@ -1,0 +1,199 @@
+{
+  "version": "1.0",
+  "projectId": "project_test_456",
+  "routes": [
+    {
+      "path": "/",
+      "name": "Home",
+      "purpose": "Landing page showcasing services and CTAs",
+      "layout": "default",
+      "sections": [
+        "hero",
+        "services-preview",
+        "testimonials",
+        "cta"
+      ],
+      "seoKeywords": [
+        "roofing contractor austin",
+        "roof repair",
+        "roofing company"
+      ],
+      "contentType": "static"
+    },
+    {
+      "path": "/services",
+      "name": "Services",
+      "purpose": "Detailed service offerings",
+      "layout": "default",
+      "sections": [
+        "header",
+        "services-grid",
+        "cta"
+      ],
+      "seoKeywords": [
+        "roofing services",
+        "commercial roofing",
+        "residential roofing"
+      ],
+      "contentType": "static"
+    },
+    {
+      "path": "/services/residential",
+      "name": "Residential Roofing",
+      "purpose": "Residential roofing services detail",
+      "layout": "default",
+      "sections": [
+        "header",
+        "service-detail",
+        "process",
+        "cta"
+      ],
+      "seoKeywords": [
+        "residential roofing austin",
+        "home roofing"
+      ],
+      "contentType": "static"
+    },
+    {
+      "path": "/about",
+      "name": "About Us",
+      "purpose": "Company background and team",
+      "layout": "default",
+      "sections": [
+        "header",
+        "story",
+        "team",
+        "certifications"
+      ],
+      "seoKeywords": [
+        "about acme roofing",
+        "roofing company austin"
+      ],
+      "contentType": "static"
+    },
+    {
+      "path": "/contact",
+      "name": "Contact",
+      "purpose": "Contact form and information",
+      "layout": "default",
+      "sections": [
+        "header",
+        "contact-form",
+        "map",
+        "info"
+      ],
+      "seoKeywords": [
+        "contact roofing contractor",
+        "get roofing quote"
+      ],
+      "contentType": "interactive"
+    }
+  ],
+  "layouts": [
+    {
+      "id": "default",
+      "name": "Default Layout",
+      "regions": [
+        "header",
+        "main",
+        "footer"
+      ],
+      "responsive": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "hero",
+      "componentType": "Hero",
+      "props": {
+        "variant": "full",
+        "hasMedia": true
+      },
+      "contentNeeds": [
+        "headline",
+        "subheadline",
+        "cta",
+        "image"
+      ]
+    },
+    {
+      "id": "services-preview",
+      "componentType": "ServiceGrid",
+      "props": {
+        "columns": 3
+      },
+      "contentNeeds": [
+        "service-cards"
+      ]
+    }
+  ],
+  "componentSpecs": [
+    {
+      "id": "hero-1",
+      "type": "Hero",
+      "variants": [
+        "full",
+        "split"
+      ],
+      "props": {
+        "variant": "full",
+        "hasMedia": true
+      },
+      "slots": [
+        "media",
+        "content"
+      ]
+    },
+    {
+      "id": "service-grid-1",
+      "type": "ServiceGrid",
+      "variants": [
+        "2-col",
+        "3-col",
+        "4-col"
+      ],
+      "props": {
+        "columns": 3
+      }
+    }
+  ],
+  "seo": {
+    "defaultMeta": {
+      "title": "Acme Roofing & Construction | Austin TX",
+      "description": "Professional roofing services in Austin, TX. 25+ years experience. Licensed & insured."
+    },
+    "routeOverrides": {
+      "/services": {
+        "title": "Roofing Services | Acme Roofing",
+        "description": "Residential and commercial roofing services."
+      }
+    },
+    "structuredData": [
+      {
+        "@type": "Organization",
+        "name": "Acme Roofing & Construction",
+        "url": "https://acmeroofing.com"
+      }
+    ]
+  },
+  "integrations": [
+    {
+      "service": "sunlight",
+      "config": {
+        "apiKey": "test"
+      },
+      "routes": [
+        "/financing"
+      ]
+    },
+    {
+      "service": "eagleview",
+      "config": {
+        "apiKey": "test"
+      },
+      "routes": [
+        "/services/residential"
+      ]
+    }
+  ]
+}

@@ -5,11 +5,15 @@
  * These agents operate in the first tier of the 3-tier architecture.
  * They transform business requirements into detailed technical specifications
  * that guide all downstream Build and Quality tier agents.
+ *
+ * Execution Order:
+ * 1. Planner - CompanyProfile → SiteSpec
+ * 2. IA Architect - SiteSpec → IAPlan (can run parallel with Brand Interpreter)
+ * 3. Brand Interpreter - CompanyProfile + SiteSpec → DesignSpec (can run parallel with IA Architect)
+ * 4. Backlog Manager - SiteSpec + IAPlan + DesignSpec → WorkQueue
  */
 
 export * from './planner';
-
-// Additional strategy tier agents to be implemented:
-// export * from './brand-interpreter';
-// export * from './ia-architect';
-// export * from './backlog-manager';
+export * from './ia-architect';
+export * from './brand-interpreter';
+export * from './backlog-manager';

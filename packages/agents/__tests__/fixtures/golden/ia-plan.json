@@ -1,0 +1,91 @@
+{
+  "version": "1.0",
+  "sitemap": {
+    "root": "/",
+    "children": [
+      {
+        "route": "/services",
+        "label": "Services",
+        "children": [
+          {
+            "route": "/services/residential",
+            "label": "Residential"
+          }
+        ]
+      },
+      {
+        "route": "/about",
+        "label": "About"
+      },
+      {
+        "route": "/contact",
+        "label": "Contact"
+      }
+    ]
+  },
+  "navigation": {
+    "primary": [
+      {
+        "route": "/",
+        "label": "Home"
+      },
+      {
+        "route": "/services",
+        "label": "Services",
+        "children": [
+          {
+            "route": "/services/residential",
+            "label": "Residential"
+          }
+        ]
+      },
+      {
+        "route": "/about",
+        "label": "About"
+      },
+      {
+        "route": "/contact",
+        "label": "Contact"
+      }
+    ],
+    "footer": [
+      {
+        "section": "Services",
+        "links": [
+          {
+            "route": "/services/residential",
+            "label": "Residential Roofing"
+          }
+        ]
+      },
+      {
+        "section": "Company",
+        "links": [
+          {
+            "route": "/about",
+            "label": "About Us"
+          },
+          {
+            "route": "/contact",
+            "label": "Contact"
+          }
+        ]
+      }
+    ],
+    "breadcrumbs": true
+  },
+  "internalLinks": [
+    {
+      "fromRoute": "/",
+      "toRoute": "/services",
+      "anchorText": "View our services",
+      "context": "Hero CTA"
+    },
+    {
+      "fromRoute": "/services",
+      "toRoute": "/services/residential",
+      "anchorText": "Learn about residential roofing",
+      "context": "Service grid"
+    }
+  ]
+}

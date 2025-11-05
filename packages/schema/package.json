@@ -14,6 +14,10 @@
     "./workflow": "./src/workflow.ts"
   },
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "clean": "rm -rf dist .turbo"
@@ -23,6 +27,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
-    "typescript": "^5.7.2"
+    "@vitest/ui": "^1.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^1.0.0"
   }
 }
