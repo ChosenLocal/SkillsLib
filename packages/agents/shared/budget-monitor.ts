@@ -292,13 +292,12 @@ export class BudgetMonitor {
         },
       },
       select: {
-        cost: true,
-        tokensUsed: true,
+        totalCost: true,
       },
     });
 
-    const totalCost = workflows.reduce((sum, w) => sum + (w.cost || 0), 0);
-    const totalTokens = workflows.reduce((sum, w) => sum + (w.tokensUsed || 0), 0);
+    const totalCost = workflows.reduce((sum, w) => sum + (w.totalCost || 0), 0);
+    const totalTokens = 0; // WorkflowExecution doesn't track individual tokens
 
     return {
       costUsd: totalCost,
@@ -348,13 +347,12 @@ export class BudgetMonitor {
         },
       },
       select: {
-        cost: true,
-        tokensUsed: true,
+        totalCost: true,
       },
     });
 
-    const totalCost = workflows.reduce((sum, w) => sum + (w.cost || 0), 0);
-    const totalTokens = workflows.reduce((sum, w) => sum + (w.tokensUsed || 0), 0);
+    const totalCost = workflows.reduce((sum, w) => sum + (w.totalCost || 0), 0);
+    const totalTokens = 0; // WorkflowExecution doesn't track individual tokens
 
     return {
       costUsd: totalCost,
@@ -466,8 +464,8 @@ export class BudgetMonitor {
       data: {
         tenantId,
         action: 'BUDGET_ALERT',
-        entityType: 'SYSTEM',
-        entityId: 'budget-monitor',
+        resourceType: 'SYSTEM',
+        resourceId: 'budget-monitor',
         metadata: {
           type,
           status,

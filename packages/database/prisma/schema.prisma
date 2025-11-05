@@ -169,7 +169,7 @@ model AuditLog {
   userAgent    String?       @db.Text
 
   // Event details
-  status       AuditStatus
+  status       AuditStatus   @default(SUCCESS)
   metadata     Json          @default("{}")
   error        String?       @db.Text
 
@@ -384,7 +384,7 @@ model WorkflowExecution {
   id                      String           @id @default(uuid())
   tenantId                String
   projectId               String
-  workflowId              String
+  workflowId              String?
 
   workflowType            WorkflowType
   workflowVersion         String
@@ -393,7 +393,7 @@ model WorkflowExecution {
   status                  WorkflowStatus   @default(QUEUED)
   currentStep             String?
   currentStepName         String?
-  totalSteps              Int
+  totalSteps              Int              @default(0)
   completedSteps          Int              @default(0)
   progressPercentage      Float            @default(0)
 
@@ -429,7 +429,7 @@ model WorkflowExecution {
   // Relations
   tenant                  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   project                 Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workflowDefinition      WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowDefinition      WorkflowDefinition? @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   agentExecutions         AgentExecution[]
 
   @@index([tenantId])
@@ -454,7 +454,7 @@ model AgentExecution {
   // Agent Information
   agentName             String
   agentRole             AgentRole
-  layer                 AgentLayer
+  layer                 AgentLayer?
   config                Json                @default("{}")
 
   // Execution State
@@ -662,6 +662,7 @@ enum AuditAction {
   PASSWORD_CHANGED
   TWO_FACTOR_ENABLED
   TWO_FACTOR_DISABLED
+  BUDGET_ALERT
 }
 
 enum AuditStatus {
