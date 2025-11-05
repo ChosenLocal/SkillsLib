@@ -22,7 +22,7 @@ export const WorkflowStatusSchema = z.enum([
   'cancelled',
 ]);
 
-export const WorkflowStepSchema = z.object({
+export const WorkflowStepSchema: z.ZodType<any> = z.object({
   id: z.string(),
   name: z.string(),
   type: z.enum(['agent', 'parallel', 'sequential', 'conditional', 'loop']),

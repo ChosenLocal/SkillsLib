@@ -17,3 +17,6 @@ export * from './workflow';
 
 // Tenant
 export * from './tenant';
+
+// Contracts (Agent Communication)
+export * from './contracts';

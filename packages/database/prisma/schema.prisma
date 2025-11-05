@@ -9,7 +9,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  extensions = [pgvector(map: "vector")]
+  // Temporarily disabled: extensions = [pgvector(map: "vector")]
 }
 
 // =============================================================================
@@ -77,12 +77,110 @@ model User {
 
   // Relations
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  accounts        Account[]
+  sessions        Session[]
 
   @@unique([email, tenantId])
   @@index([tenantId])
   @@index([email])
   @@index([deletedAt])
   @@map("users")
+}
+
+// NextAuth.js Account model for OAuth providers
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  tenantId          String  // Multi-tenant support
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("accounts")
+}
+
+// NextAuth.js Session model for database sessions
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  tenantId     String   // Multi-tenant support
+  expires      DateTime
+
+  // Additional session metadata
+  userAgent    String?  @db.Text
+  ipAddress    String?
+  lastActive   DateTime @default(now())
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expires])
+  @@map("sessions")
+}
+
+// NextAuth.js VerificationToken for email verification and password reset
+model VerificationToken {
+  id         String   @id @default(uuid())
+  identifier String   // Email or user ID
+  token      String   @unique
+  type       TokenType
+  expires    DateTime
+
+  createdAt  DateTime @default(now())
+
+  @@unique([identifier, token])
+  @@index([expires])
+  @@map("verification_tokens")
+}
+
+// Audit Log for security events
+model AuditLog {
+  id           String        @id @default(uuid())
+  tenantId     String?       // Nullable for pre-auth events
+  userId       String?
+  action       AuditAction
+  resourceType String?
+  resourceId   String?
+
+  // Request metadata
+  ipAddress    String?
+  userAgent    String?       @db.Text
+
+  // Event details
+  status       AuditStatus
+  metadata     Json          @default("{}")
+  error        String?       @db.Text
+
+  createdAt    DateTime      @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([status])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 
 // =============================================================================
@@ -540,4 +638,34 @@ enum AgentStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  MAGIC_LINK
+}
+
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  REGISTER
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_SUCCESS
+  EMAIL_VERIFICATION
+  SESSION_CREATED
+  SESSION_REVOKED
+  ACCOUNT_LINKED
+  ACCOUNT_UNLINKED
+  PROFILE_UPDATED
+  PASSWORD_CHANGED
+  TWO_FACTOR_ENABLED
+  TWO_FACTOR_DISABLED
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+  BLOCKED
 }

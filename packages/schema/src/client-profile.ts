@@ -4,14 +4,12 @@ import {
   AssetSchema,
   AvailabilityScheduleSchema,
   AwardSchema,
-  BusinessHoursSchema,
   CaseStudySchema,
   CertificationSchema,
   ColorSchema,
   CompetitorSchema,
   CustomerSegmentSchema,
   DepartmentSchema,
-  DurationSchema,
   FontSchema,
   FormRequirementSchema,
   GradientSchema,
@@ -23,7 +21,6 @@ import {
   PersonaSchema,
   PortfolioItemSchema,
   ProductSchema,
-  ReviewSchema,
   SEORequirementsSchema,
   ServiceSchema,
   TeamMemberSchema,
@@ -38,13 +35,14 @@ import {
 
 // ==================== CORE IDENTIFICATION ====================
 
-const CoreIdentificationSchema = z.object({
-  id: z.string().uuid(),
-  version: z.string().describe('Schema version for migrations'),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  lastSyncedAt: z.date(),
-});
+// Note: Core identification fields are inlined in ClientProfileSchema
+// const CoreIdentificationSchema = z.object({
+//   id: z.string().uuid(),
+//   version: z.string().describe('Schema version for migrations'),
+//   createdAt: z.date(),
+//   updatedAt: z.date(),
+//   lastSyncedAt: z.date(),
+// });
 
 // ==================== COMPANY FUNDAMENTALS ====================
 

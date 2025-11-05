@@ -5,7 +5,8 @@
   "description": "Multi-agent business automation system with 30+ agent website builder for contractor clients",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "services/*"
   ],
   "engines": {
     "node": ">=20.0.0",
@@ -18,22 +19,33 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "typecheck": "pnpm type-check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "type-check": "turbo run type-check",
     "clean": "turbo run clean && rm -rf node_modules",
     "db:generate": "turbo run db:generate",
     "db:push": "turbo run db:push",
     "db:migrate": "turbo run db:migrate",
-    "db:studio": "turbo run db:studio"
+    "db:migrate:direct": "pnpm --filter @business-automation/database migrate",
+    "db:studio": "turbo run db:studio",
+    "db:studio:direct": "pnpm --filter @business-automation/database studio",
+    "db:seed": "pnpm --filter @business-automation/database seed",
+    "agent:new": "node scripts/scaffold-agent.js",
+    "agent:test": "node scripts/test-agent.js",
+    "dev:agent": "node scripts/dev-run-agent.js",
+    "monitor:quality": "pnpm --filter @business-automation/monitoring quality-scan",
+    "build:site": "node scripts/build-site.js"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
+    "@playwright/test": "^1.40.0",
     "@types/node": "^20.11.19",
     "eslint": "^8.57.0",
     "prettier": "^3.2.5",
     "turbo": "^2.0.3",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^1.0.0"
   },
   "packageManager": "pnpm@9.1.0",
   "keywords": [
@@ -46,5 +58,14 @@
     "nextjs"
   ],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "@modelcontextprotocol/server-filesystem": "^2025.8.21",
+    "@modelcontextprotocol/server-memory": "^2025.9.25",
+    "bullmq": "^5.63.0",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.2",
+    "inngest": "^3.24.0"
+  }
 }

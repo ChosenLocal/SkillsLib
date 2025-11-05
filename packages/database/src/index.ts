@@ -5,4 +5,4 @@
 
 export * from '@prisma/client';
 export { prisma, setTenantContext, clearTenantContext, getCurrentTenantId } from './client';
-export default from './client';
+export { default } from './client';

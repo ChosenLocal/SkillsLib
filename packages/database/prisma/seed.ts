@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { hash } from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -30,7 +31,8 @@ async function main() {
 
   console.log('✅ Created tenant:', tenant.name);
 
-  // Create a demo user
+  // Create a demo user with password: testpassword123
+  const passwordHash = await hash('testpassword123', 10);
   const user = await prisma.user.upsert({
     where: {
       email_tenantId: {
@@ -38,13 +40,16 @@ async function main() {
         tenantId: tenant.id,
       },
     },
-    update: {},
+    update: {
+      passwordHash,
+    },
     create: {
       email: 'demo@contractor.com',
       name: 'Demo User',
       tenantId: tenant.id,
       role: 'OWNER',
       emailVerified: new Date(),
+      passwordHash,
     },
   });
 
@@ -225,6 +230,44 @@ async function main() {
   });
 
   console.log('✅ Created workflow definition:', workflowDef.name);
+
+  // Create a second tenant for isolation testing
+  const tenant2 = await prisma.tenant.upsert({
+    where: { slug: 'test-tenant-2' },
+    update: {},
+    create: {
+      name: 'Test Tenant 2',
+      slug: 'test-tenant-2',
+      subscriptionTier: 'FREE',
+      subscriptionStatus: 'ACTIVE',
+      settings: {},
+    },
+  });
+
+  // Create a user for second tenant
+  const passwordHash2 = await hash('testpassword123', 10);
+  const user2 = await prisma.user.upsert({
+    where: {
+      email_tenantId: {
+        email: 'user2@tenant2.com',
+        tenantId: tenant2.id,
+      },
+    },
+    update: {
+      passwordHash: passwordHash2,
+    },
+    create: {
+      email: 'user2@tenant2.com',
+      name: 'Tenant 2 User',
+      tenantId: tenant2.id,
+      role: 'OWNER',
+      emailVerified: new Date(),
+      passwordHash: passwordHash2,
+    },
+  });
+
+  console.log('✅ Created second tenant for isolation testing:', tenant2.name);
+  console.log('✅ Created second tenant user:', user2.email);
 
   console.log('🎉 Database seeded successfully!');
 }

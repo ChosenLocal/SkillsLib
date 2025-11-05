@@ -1,0 +1,177 @@
+name: Authentication Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  auth-tests:
+    name: Run Auth Tests with DISABLE_AUTH=false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: testpassword123
+          POSTGRES_DB: business_automation_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup test environment variables
+        run: |
+          # API env
+          cat > apps/api/.env.test <<EOF
+          NODE_ENV=test
+          DATABASE_URL=postgresql://admin:testpassword123@localhost:5432/business_automation_test
+          REDIS_URL=redis://localhost:6379
+          NEXTAUTH_SECRET=h+BHQx9Cu9j3Q5lnOFZDUrBPP2rzHPmVYxSPEJ475f8=
+          DISABLE_AUTH=false
+          API_PORT=3001
+          CORS_ORIGIN=http://localhost:3000
+          EOF
+
+          # Web env
+          cat > apps/web/.env.test <<EOF
+          NODE_ENV=test
+          DATABASE_URL=postgresql://admin:testpassword123@localhost:5432/business_automation_test
+          NEXTAUTH_SECRET=h+BHQx9Cu9j3Q5lnOFZDUrBPP2rzHPmVYxSPEJ475f8=
+          NEXTAUTH_URL=http://localhost:3000
+          NEXT_PUBLIC_API_URL=http://localhost:3001/trpc
+          NEXT_PUBLIC_APP_URL=http://localhost:3000
+          DISABLE_AUTH=false
+          NEXT_PUBLIC_DISABLE_AUTH=false
+          EOF
+
+      - name: Run database migrations
+        run: |
+          cd apps/api
+          pnpm db:push
+        env:
+          DATABASE_URL: postgresql://admin:testpassword123@localhost:5432/business_automation_test
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Start API server in background
+        run: |
+          cd apps/api
+          cp .env.test .env.local
+          pnpm dev &
+          echo $! > api-server.pid
+        env:
+          DATABASE_URL: postgresql://admin:testpassword123@localhost:5432/business_automation_test
+
+      - name: Wait for API server
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:3001/health; do sleep 2; done'
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run auth E2E tests
+        run: |
+          cd apps/web
+          pnpm exec playwright test tests/auth/full-flow.spec.ts --project=chromium
+        env:
+          DISABLE_AUTH: false
+          NEXT_PUBLIC_DISABLE_AUTH: false
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 30
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f apps/api/api-server.pid ]; then
+            kill $(cat apps/api/api-server.pid) || true
+          fi
+
+  security-check:
+    name: Verify No DISABLE_AUTH in Production Config
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for DISABLE_AUTH=true in production configs
+        run: |
+          # Search for DISABLE_AUTH=true in any .env.production files
+          if grep -r "DISABLE_AUTH.*true" .env.production* 2>/dev/null; then
+            echo "❌ ERROR: DISABLE_AUTH=true found in production config!"
+            echo "This is a critical security issue."
+            exit 1
+          fi
+          echo "✅ No DISABLE_AUTH=true found in production configs"
+
+      - name: Check production validation exists in server.ts
+        run: |
+          if ! grep -q "DISABLE_AUTH.*production" apps/api/src/server.ts; then
+            echo "❌ ERROR: Production safety check missing in server.ts!"
+            exit 1
+          fi
+          echo "✅ Production safety check found in API server"
+
+      - name: Check production validation exists in middleware.ts
+        run: |
+          if ! grep -q "DISABLE_AUTH.*production" apps/web/middleware.ts; then
+            echo "❌ ERROR: Production safety check missing in middleware.ts!"
+            exit 1
+          fi
+          echo "✅ Production safety check found in web middleware"
