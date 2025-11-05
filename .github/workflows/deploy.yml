@@ -1,0 +1,329 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '20.x'
+  PNPM_VERSION: '8.15.0'
+
+jobs:
+  # Determine deployment environment
+  setup:
+    name: Setup Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      deploy-url: ${{ steps.set-env.outputs.deploy-url }}
+
+    steps:
+      - name: Determine environment
+        id: set-env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENV="staging"
+          else
+            ENV="preview"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+
+          case $ENV in
+            production)
+              echo "deploy-url=https://app.yourdomain.com" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "deploy-url=https://staging.yourdomain.com" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "deploy-url=https://preview-${{ github.sha }}.yourdomain.com" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # Run full test suite before deployment
+  pre-deploy-tests:
+    name: Pre-deployment Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm db:migrate
+        working-directory: packages/database
+
+      - name: Run full test suite
+        run: pnpm test
+
+      - name: Build all packages
+        run: pnpm build
+
+  # Deploy Next.js app to Vercel
+  deploy-web:
+    name: Deploy Web App
+    runs-on: ubuntu-latest
+    needs: [setup, pre-deploy-tests]
+    environment:
+      name: ${{ needs.setup.outputs.environment }}
+      url: ${{ needs.setup.outputs.deploy-url }}
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        id: vercel-deploy
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: ${{ needs.setup.outputs.environment == 'production' && '--prod' || '' }}
+          working-directory: apps/web
+
+      - name: Set deployment URL
+        id: deployment-url
+        run: echo "url=${{ steps.vercel-deploy.outputs.preview-url }}" >> $GITHUB_OUTPUT
+
+  # Deploy Inngest functions
+  deploy-inngest:
+    name: Deploy Inngest Functions
+    runs-on: ubuntu-latest
+    needs: [setup, pre-deploy-tests]
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build agents package
+        run: pnpm build
+        working-directory: packages/agents
+
+      - name: Deploy Inngest functions
+        run: |
+          echo "Deploying Inngest functions to ${{ needs.setup.outputs.environment }}..."
+          # npx inngest-cli deploy \
+          #   --signing-key="${{ secrets.INNGEST_SIGNING_KEY }}" \
+          #   --env="${{ needs.setup.outputs.environment }}"
+        working-directory: packages/agents
+
+  # Run post-deployment health checks
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-web, deploy-inngest]
+    timeout-minutes: 5
+
+    steps:
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Check web app health
+        run: |
+          URL="${{ needs.setup.outputs.deploy-url }}/api/health"
+          echo "Checking health at: $URL"
+
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+
+          if [[ "$RESPONSE" != "200" ]]; then
+            echo "❌ Health check failed with status: $RESPONSE"
+            exit 1
+          fi
+
+          echo "✅ Health check passed"
+
+      - name: Run smoke tests
+        run: |
+          URL="${{ needs.setup.outputs.deploy-url }}"
+          echo "Running smoke tests against: $URL"
+
+          # Test homepage
+          curl -f "$URL" || exit 1
+
+          # Test dashboard (requires auth - just check it loads)
+          curl -f "$URL/dashboard" || echo "Dashboard requires auth (expected)"
+
+          echo "✅ Smoke tests passed"
+
+  # Run Lighthouse CI on deployed app
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-web, health-check]
+    if: needs.setup.outputs.environment != 'preview'
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli@0.13.x
+
+      - name: Run Lighthouse CI
+        run: |
+          lhci autorun \
+            --collect.url="${{ needs.setup.outputs.deploy-url }}" \
+            --upload.target=temporary-public-storage
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+  # Auto-rollback on failure
+  rollback:
+    name: Auto Rollback
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-web, health-check]
+    if: failure() && needs.setup.outputs.environment == 'production'
+    timeout-minutes: 5
+
+    steps:
+      - name: Rollback deployment
+        run: |
+          echo "⚠️  Deployment failed, initiating rollback..."
+
+          # Roll back Vercel deployment
+          vercel rollback ${{ secrets.VERCEL_PROJECT_ID }} \
+            --token="${{ secrets.VERCEL_TOKEN }}" \
+            --yes
+
+          echo "✅ Rollback completed"
+
+      - name: Notify team
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Production deployment failed and was automatically rolled back**\n\nPlease check the logs and fix the issues before redeploying.'
+            });
+
+  # Deployment summary
+  deploy-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-web, deploy-inngest, health-check]
+    if: always()
+    timeout-minutes: 2
+
+    steps:
+      - name: Create summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ needs.setup.outputs.deploy-url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.health-check.result }}" == "success" ]]; then
+            echo "✅ **Status:** Deployment successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status:** Deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi

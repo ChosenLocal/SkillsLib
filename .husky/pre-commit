@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Pre-commit hook to catch issues before commit
+
+echo "🔍 Running pre-commit checks..."
+
+# 1. Run Prettier on staged files
+echo "📝 Formatting code with Prettier..."
+pnpm exec lint-staged
+
+# 2. Run type checking on changed TypeScript files
+echo "🔎 Type checking..."
+pnpm type-check
+
+# 3. Run tests related to changed files (if any)
+if git diff --cached --name-only | grep -E '\.(test|spec)\.(ts|tsx|js|jsx)$' > /dev/null; then
+  echo "🧪 Running tests..."
+  pnpm test --run --changed
+fi
+
+# 4. Validate commit message format
+echo "✅ Commit message validation..."
+pnpm exec commitlint --edit $1
+
+echo "✨ Pre-commit checks passed!"
