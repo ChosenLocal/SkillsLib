@@ -25,9 +25,16 @@ class RedisClientManager {
       return; // Already connected
     }
 
-    const redisUrl = process.env.REDIS_URL;
+    let redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
-      throw new Error('REDIS_URL environment variable is required');
+      // Provide a sensible default for local development and tests
+      const isProd = process.env.NODE_ENV === 'production';
+      if (isProd) {
+        throw new Error('REDIS_URL environment variable is required in production');
+      } else {
+        redisUrl = 'redis://localhost:6379';
+        console.warn('[Redis] REDIS_URL not set. Falling back to redis://localhost:6379');
+      }
     }
 
     const options: RedisOptions = {

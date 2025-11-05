@@ -97,29 +97,7 @@ export class BudgetMonitor {
   }): Promise<void> {
     const { agentExecutionId, projectId, tenantId, costUsd, tokensUsed } = params;
 
-    if (!this.redis) {
-      console.warn('[BudgetMonitor] Redis not initialized, skipping tracking');
-      return;
-    }
-
-    const timestamp = new Date().toISOString();
-
-    // Store in Redis for fast access
-    const key = `budget:agent:${agentExecutionId}`;
-    await this.redis.hset(key, {
-      costUsd: costUsd.toString(),
-      tokensUsed: tokensUsed.toString(),
-      timestamp,
-    });
-    await this.redis.expire(key, 86400); // 24 hours
-
-    // Increment tenant monthly usage
-    const monthKey = this.getMonthKey(tenantId);
-    await this.redis.hincrby(monthKey, 'tokens', tokensUsed);
-    await this.redis.hincrbyfloat(monthKey, 'cost', costUsd);
-    await this.redis.expire(monthKey, 2592000); // 30 days
-
-    // Update database
+    // ALWAYS update database (source of truth)
     await this.prisma.agentExecution.update({
       where: { id: agentExecutionId },
       data: {
@@ -127,6 +105,32 @@ export class BudgetMonitor {
         tokensUsed,
       },
     });
+
+    // Update Redis cache if available (optional performance optimization)
+    if (this.redis) {
+      try {
+        const timestamp = new Date().toISOString();
+
+        // Store in Redis for fast access
+        const key = `budget:agent:${agentExecutionId}`;
+        await this.redis.hset(key, {
+          costUsd: costUsd.toString(),
+          tokensUsed: tokensUsed.toString(),
+          timestamp,
+        });
+        await this.redis.expire(key, 86400); // 24 hours
+
+        // Increment tenant monthly usage
+        const monthKey = this.getMonthKey(tenantId);
+        await this.redis.hincrby(monthKey, 'tokens', tokensUsed);
+        await this.redis.hincrbyfloat(monthKey, 'cost', costUsd);
+        await this.redis.expire(monthKey, 2592000); // 30 days
+      } catch (error) {
+        console.warn('[BudgetMonitor] Redis cache update failed, continuing with DB update', error);
+      }
+    } else {
+      console.warn('[BudgetMonitor] Redis not initialized, skipping cache update (DB updated successfully)');
+    }
   }
 
   /**
@@ -141,30 +145,33 @@ export class BudgetMonitor {
   }): Promise<void> {
     const { workflowExecutionId, projectId, tenantId, costUsd, tokensUsed } = params;
 
-    if (!this.redis) {
-      console.warn('[BudgetMonitor] Redis not initialized, skipping tracking');
-      return;
-    }
-
-    const timestamp = new Date().toISOString();
-
-    // Store in Redis
-    const key = `budget:workflow:${workflowExecutionId}`;
-    await this.redis.hset(key, {
-      costUsd: costUsd.toString(),
-      tokensUsed: tokensUsed.toString(),
-      timestamp,
-    });
-    await this.redis.expire(key, 86400); // 24 hours
-
-    // Update database
+    // ALWAYS update database (source of truth)
     await this.prisma.workflowExecution.update({
       where: { id: workflowExecutionId },
       data: {
-        cost: costUsd,
-        tokensUsed,
+        totalCost: costUsd, // WorkflowExecution uses totalCost, not cost
       },
     });
+
+    // Update Redis cache if available (optional performance optimization)
+    if (this.redis) {
+      try {
+        const timestamp = new Date().toISOString();
+
+        // Store in Redis
+        const key = `budget:workflow:${workflowExecutionId}`;
+        await this.redis.hset(key, {
+          costUsd: costUsd.toString(),
+          tokensUsed: tokensUsed.toString(), // Kept for Redis cache compatibility
+          timestamp,
+        });
+        await this.redis.expire(key, 86400); // 24 hours
+      } catch (error) {
+        console.warn('[BudgetMonitor] Redis cache update failed, continuing with DB update', error);
+      }
+    } else {
+      console.warn('[BudgetMonitor] Redis not initialized, skipping cache update (DB updated successfully)');
+    }
   }
 
   /**
@@ -284,6 +291,7 @@ export class BudgetMonitor {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
+    // Get workflow costs
     const workflows = await this.prisma.workflowExecution.findMany({
       where: {
         tenantId,
@@ -296,11 +304,26 @@ export class BudgetMonitor {
       },
     });
 
-    const totalCost = workflows.reduce((sum, w) => sum + (w.totalCost || 0), 0);
-    const totalTokens = 0; // WorkflowExecution doesn't track individual tokens
+    // Get agent execution costs (for individual agent runs)
+    const agents = await this.prisma.agentExecution.findMany({
+      where: {
+        tenantId,
+        createdAt: {
+          gte: startOfMonth,
+        },
+      },
+      select: {
+        cost: true,
+        tokensUsed: true,
+      },
+    });
+
+    const workflowCost = workflows.reduce((sum, w) => sum + (w.totalCost || 0), 0);
+    const agentCost = agents.reduce((sum, a) => sum + (a.cost || 0), 0);
+    const totalTokens = agents.reduce((sum, a) => sum + (a.tokensUsed || 0), 0);
 
     return {
-      costUsd: totalCost,
+      costUsd: workflowCost + agentCost,
       tokensUsed: totalTokens,
       timestamp: new Date(),
     };
@@ -340,6 +363,7 @@ export class BudgetMonitor {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
+    // Get workflow costs
     const workflows = await this.prisma.workflowExecution.findMany({
       where: {
         createdAt: {
@@ -351,11 +375,25 @@ export class BudgetMonitor {
       },
     });
 
-    const totalCost = workflows.reduce((sum, w) => sum + (w.totalCost || 0), 0);
-    const totalTokens = 0; // WorkflowExecution doesn't track individual tokens
+    // Get agent execution costs
+    const agents = await this.prisma.agentExecution.findMany({
+      where: {
+        createdAt: {
+          gte: startOfMonth,
+        },
+      },
+      select: {
+        cost: true,
+        tokensUsed: true,
+      },
+    });
+
+    const workflowCost = workflows.reduce((sum, w) => sum + (w.totalCost || 0), 0);
+    const agentCost = agents.reduce((sum, a) => sum + (a.cost || 0), 0);
+    const totalTokens = agents.reduce((sum, a) => sum + (a.tokensUsed || 0), 0);
 
     return {
-      costUsd: totalCost,
+      costUsd: workflowCost + agentCost,
       tokensUsed: totalTokens,
       timestamp: new Date(),
     };
