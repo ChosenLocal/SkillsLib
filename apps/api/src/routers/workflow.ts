@@ -9,8 +9,7 @@ import { router, protectedProcedure } from '../trpc.js';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { WorkflowTypeSchema } from '@business-automation/schema';
-// TODO: Setup agents/jobs package for workflow execution
-// import { sendWorkflowExecute } from '@business-automation/agents/jobs';
+import { sendWorkflowExecute, sendWebsiteGenerate } from '@business-automation/agents/jobs';
 
 /**
  * Workflow configuration schema
@@ -24,6 +23,130 @@ const WorkflowConfigSchema = z.object({
 });
 
 export const workflowRouter = router({
+  /**
+   * Generate a website using the 3-tier agent architecture
+   */
+  generateWebsite: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        companyProfileId: z.string().uuid(),
+        constraints: z
+          .object({
+            maxPages: z.number().min(1).max(50).optional(),
+            maxComponents: z.number().min(1).max(100).optional(),
+            budget: z
+              .object({
+                maxCostUsd: z.number().min(0).max(1000).optional(),
+                maxTokens: z.number().min(0).max(1000000).optional(),
+              })
+              .optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Verify project exists and belongs to tenant
+      const project = await ctx.prisma.project.findFirst({
+        where: {
+          id: input.projectId,
+          tenantId: ctx.user.tenantId,
+        },
+      });
+
+      if (!project) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Project not found',
+        });
+      }
+
+      // Verify company profile exists and belongs to tenant
+      const companyProfile = await ctx.prisma.companyProfile.findFirst({
+        where: {
+          id: input.companyProfileId,
+          tenantId: ctx.user.tenantId,
+        },
+      });
+
+      if (!companyProfile) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Company profile not found',
+        });
+      }
+
+      // Check if there's already a running workflow for this project
+      const existingWorkflow = await ctx.prisma.workflowExecution.findFirst({
+        where: {
+          projectId: input.projectId,
+          tenantId: ctx.user.tenantId,
+          status: {
+            in: ['QUEUED', 'RUNNING'],
+          },
+        },
+      });
+
+      if (existingWorkflow) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'A workflow is already running for this project',
+        });
+      }
+
+      // Create workflow execution record
+      const workflowExecution = await ctx.prisma.workflowExecution.create({
+        data: {
+          tenantId: ctx.user.tenantId,
+          projectId: input.projectId,
+          workflowId: `website-generator-${Date.now()}`,
+          workflowType: 'WEBSITE_GENERATOR',
+          workflowVersion: '1.0.0',
+          status: 'QUEUED',
+          totalSteps: 10, // 4 strategy + 3 build + 2 quality + 1 finalize
+          completedSteps: 0,
+          progressPercentage: 0,
+          input: {
+            companyProfileId: input.companyProfileId,
+            constraints: input.constraints,
+          },
+          output: {},
+          context: {},
+          retryCount: 0,
+          iteration: 1,
+          maxIterations: 1, // Website generation doesn't iterate
+          shouldContinueIteration: false,
+          metadata: {
+            startedBy: ctx.user.id,
+            companyProfileId: input.companyProfileId,
+          },
+        },
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+        },
+      });
+
+      // Trigger website generation via Inngest
+      await sendWebsiteGenerate({
+        projectId: input.projectId,
+        companyProfileId: input.companyProfileId,
+        tenantId: ctx.user.tenantId,
+        userId: ctx.user.id,
+        constraints: input.constraints,
+      });
+
+      return {
+        workflowExecution,
+        message: 'Website generation started successfully',
+      };
+    }),
+
   /**
    * Execute a new workflow for a project
    */
@@ -91,14 +214,14 @@ export const workflowRouter = router({
         },
       });
 
-      // TODO: Trigger workflow execution via Inngest
-      // await sendWorkflowExecute({
-      //   workflowDefinitionId: workflowExecution.id,
-      //   projectId: input.projectId,
-      //   tenantId: ctx.user.tenantId,
-      //   userId: ctx.user.id,
-      //   input: {},
-      // });
+      // Trigger workflow execution via Inngest
+      await sendWorkflowExecute({
+        workflowDefinitionId: workflowExecution.id,
+        projectId: input.projectId,
+        tenantId: ctx.user.tenantId,
+        userId: ctx.user.id,
+        input: {},
+      });
 
       return workflowExecution;
     }),

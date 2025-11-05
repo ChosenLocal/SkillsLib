@@ -13,6 +13,22 @@ export type InngestEvents = {
       input?: any;
     };
   };
+  'website/generate': {
+    data: {
+      projectId: string;
+      companyProfileId: string;
+      tenantId: string;
+      userId: string;
+      constraints?: {
+        maxPages?: number;
+        maxComponents?: number;
+        budget?: {
+          maxCostUsd?: number;
+          maxTokens?: number;
+        };
+      };
+    };
+  };
   'agent/execute': {
     data: {
       agentRole: string;
@@ -70,6 +86,16 @@ export const inngest = new Inngest({
 export async function sendWorkflowExecute(data: InngestEvents['workflow/execute']['data']) {
   return inngest.send({
     name: 'workflow/execute',
+    data,
+  });
+}
+
+/**
+ * Send website generation event
+ */
+export async function sendWebsiteGenerate(data: InngestEvents['website/generate']['data']) {
+  return inngest.send({
+    name: 'website/generate',
     data,
   });
 }
