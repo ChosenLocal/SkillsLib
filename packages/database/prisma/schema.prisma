@@ -47,6 +47,7 @@ model Tenant {
   agentExecutions     AgentExecution[]
   workflowExecutions  WorkflowExecution[]
   workflowDefinitions WorkflowDefinition[]
+  discoverySessions   DiscoverySession[]
 
   @@index([slug])
   @@index([deletedAt])
@@ -346,6 +347,43 @@ model WebsiteEvaluation {
   @@index([tenantId])
   @@index([iteration])
   @@map("website_evaluations")
+}
+
+// =============================================================================
+// DISCOVERY SESSIONS
+// =============================================================================
+
+model DiscoverySession {
+  id                  String                 @id @default(uuid())
+  tenantId            String
+  userId              String
+  projectId           String?
+  companyProfileId    String?
+
+  // Session State
+  status              DiscoverySessionStatus @default(ACTIVE)
+
+  // Collected Data
+  extractedData       Json                   @default("{}")
+  completeness        Int                    @default(0) // 0-100 percentage
+
+  // Conversation History
+  messages            Json                   @default("[]") // Array of {role, content, timestamp}
+
+  // Metadata
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  completedAt         DateTime?
+
+  // Relations
+  tenant              Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([projectId])
+  @@index([companyProfileId])
+  @@map("discovery_sessions")
 }
 
 // =============================================================================
@@ -669,4 +707,10 @@ enum AuditStatus {
   SUCCESS
   FAILURE
   BLOCKED
+}
+
+enum DiscoverySessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
 }

@@ -13,6 +13,7 @@ import { subscriptionRouter } from './subscription.js';
 import { tenantRouter } from './tenant.js';
 import { workflowRouter } from './workflow.js';
 import { agentRouter } from './agent.js';
+import { discoveryRouter } from './discovery.js';
 
 /**
  * Main app router combining all feature routers
@@ -25,6 +26,7 @@ export const appRouter = router({
   tenant: tenantRouter,
   workflow: workflowRouter,
   agent: agentRouter,
+  discovery: discoveryRouter,
 });
 
 /**
